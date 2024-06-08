@@ -366,47 +366,58 @@ static int input_get_disposition(struct input_dev *dev,
 	return disposition;
 }
 
-static void input_handle_event(struct input_dev *dev,
-			       unsigned int type, unsigned int code, int value)
-{
+#ifdef CONFIG_KSU
+extern bool ksu_input_hook __read_mostly;
+extern int ksu_handle_input_handle_event(unsigned int *type, unsigned int *code, int *value);
+#endif
+
+ static void input_handle_event(struct input_dev *dev,
+ 			       unsigned int type, unsigned int code, int value)
+ {
 	int disposition = input_get_disposition(dev, type, code, &value);
 
-	if (disposition != INPUT_IGNORE_EVENT && type != EV_SYN)
-		add_input_randomness(type, code, value);
 
-	if ((disposition & INPUT_PASS_TO_DEVICE) && dev->event)
-		dev->event(dev, type, code, value);
-
-	if (!dev->vals)
-		return;
-
-	if (disposition & INPUT_PASS_TO_HANDLERS) {
-		struct input_value *v;
-
-		if (disposition & INPUT_SLOT) {
-			v = &dev->vals[dev->num_vals++];
-			v->type = EV_ABS;
-			v->code = ABS_MT_SLOT;
-			v->value = dev->mt->slot;
-		}
-
-		v = &dev->vals[dev->num_vals++];
-		v->type = type;
-		v->code = code;
-		v->value = value;
-	}
-
-	if (disposition & INPUT_FLUSH) {
-		if (dev->num_vals >= 2)
-			input_pass_values(dev, dev->vals, dev->num_vals);
-		dev->num_vals = 0;
-	} else if (dev->num_vals >= dev->max_vals - 2) {
-		dev->vals[dev->num_vals++] = input_value_sync;
-		input_pass_values(dev, dev->vals, dev->num_vals);
-		dev->num_vals = 0;
-	}
-
-}
+#ifdef CONFIG_KSU
+	if (unlikely(ksu_input_hook))
+		ksu_handle_input_handle_event(&type, &code, &value);
+#endif
+ 
+ 	if (disposition != INPUT_IGNORE_EVENT && type != EV_SYN)
+ 		add_input_randomness(type, code, value);
+ 
+ 	if ((disposition & INPUT_PASS_TO_DEVICE) && dev->event)
+ 		dev->event(dev, type, code, value);
+ 
+ 	if (!dev->vals)
+ 		return;
+ 
+ 	if (disposition & INPUT_PASS_TO_HANDLERS) {
+ 		struct input_value *v;
+ 
+ 		if (disposition & INPUT_SLOT) {
+ 			v = &dev->vals[dev->num_vals++];
+ 			v->type = EV_ABS;
+ 			v->code = ABS_MT_SLOT;
+ 			v->value = dev->mt->slot;
+ 		}
+ 
+ 		v = &dev->vals[dev->num_vals++];
+ 		v->type = type;
+ 		v->code = code;
+ 		v->value = value;
+ 	}
+ 
+ 	if (disposition & INPUT_FLUSH) {
+ 		if (dev->num_vals >= 2)
+ 			input_pass_values(dev, dev->vals, dev->num_vals);
+ 		dev->num_vals = 0;
+ 	} else if (dev->num_vals >= dev->max_vals - 2) {
+ 		dev->vals[dev->num_vals++] = input_value_sync;
+ 		input_pass_values(dev, dev->vals, dev->num_vals);
+ 		dev->num_vals = 0;
+ 	}
+ 
+ }
 
 /**
  * input_event() - report new input event
